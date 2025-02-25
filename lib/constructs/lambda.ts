@@ -6,6 +6,9 @@ import {
   NodejsFunctionProps,
 } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as path from "path";
+import * as events from "aws-cdk-lib/aws-events";
+import * as eventsTargets from "aws-cdk-lib/aws-events-targets";
+import * as iam from "aws-cdk-lib/aws-iam";
 
 import { Topic } from "aws-cdk-lib/aws-sns";
 
@@ -26,8 +29,7 @@ export class LambdaResource extends Construct {
         SNS_TOPIC_ARN: props.backupAlertTopic.topicArn,
       },
       bundling: {
-        externalModules: ["aws-sdk"],
-        minify: true,
+        nodeModules: ["@aws-sdk/client-ec2", "@aws-sdk/client-sns"],
       },
     };
 
@@ -36,5 +38,23 @@ export class LambdaResource extends Construct {
     });
 
     props.backupAlertTopic.grantPublish(backupLambda);
+
+    backupLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          "ec2:DescribeInstances",
+          "ec2:CreateSnapshot",
+          "ec2:DescribeSnapshots",
+          "ec2:DeleteSnapshot",
+          "ec2:CreateTags",
+        ],
+        resources: ["*"],
+      })
+    );
+
+    new events.Rule(this, "DailyBackupRule", {
+      schedule: events.Schedule.cron({ minute: "0/5", hour: "*" }),
+      targets: [new eventsTargets.LambdaFunction(backupLambda)],
+    });
   }
 }

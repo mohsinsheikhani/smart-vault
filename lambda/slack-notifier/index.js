@@ -23,7 +23,7 @@ export const handler = async (event) => {
   console.log("Received event:", JSON.stringify(event, null, 2));
 
   try {
-    const message = JSON.parse(event.Records[0].Sns.Message);
+    const message = event.Records[0].Sns.Message;
     const subject = event.Records[0].Sns.Subject;
 
     const slackMessage = {

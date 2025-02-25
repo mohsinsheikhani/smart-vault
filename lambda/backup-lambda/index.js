@@ -1,37 +1,41 @@
-const AWS = require("aws-sdk");
+import {
+  EC2Client,
+  DescribeInstancesCommand,
+  CreateSnapshotCommand,
+  DeleteSnapshotCommand,
+  DescribeSnapshotsCommand,
+} from "@aws-sdk/client-ec2";
+import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 
-const ec2 = new AWS.EC2();
-const sns = new AWS.SNS();
+const ec2 = new EC2Client({});
+const sns = new SNSClient({});
 
 const SNS_TOPIC_ARN = process.env.SNS_TOPIC_ARN;
-
-// Keep snapshots for 7 days
 const RETENTION_DAYS = 7;
 
-exports.handler = async () => {
+export const handler = async () => {
   try {
     console.log("Finding EC2 instances with Backup: True tag...");
 
     // 1. Find all EC2 instances with the Backup: True tag
-    const instances = await ec2
-      .describeInstances({
+    const instancesData = await ec2.send(
+      new DescribeInstancesCommand({
         Filters: [{ Name: "tag:Backup", Values: ["True"] }],
       })
-      .promise();
+    );
 
     let snapshotIds = [];
 
-    for (const reservation of instances.Reservations) {
-      for (const instance of reservation.Instances) {
+    for (const reservation of instancesData.Reservations || []) {
+      for (const instance of reservation.Instances || []) {
         console.log(
           `📌 Creating snapshot for instance: ${instance.InstanceId}`
         );
 
-        // 2. Create a snapshot for each instance's root volume
-        const volumeId = instance.BlockDeviceMappings[0]?.Ebs?.VolumeId;
+        const volumeId = instance.BlockDeviceMappings?.[0]?.Ebs?.VolumeId;
         if (volumeId) {
-          const snapshot = await ec2
-            .createSnapshot({
+          const snapshot = await ec2.send(
+            new CreateSnapshotCommand({
               VolumeId: volumeId,
               Description: `Backup for ${
                 instance.InstanceId
@@ -46,7 +50,7 @@ exports.handler = async () => {
                 },
               ],
             })
-            .promise();
+          );
 
           snapshotIds.push(snapshot.SnapshotId);
           console.log(`Snapshot Created: ${snapshot.SnapshotId}`);
@@ -56,30 +60,34 @@ exports.handler = async () => {
 
     // 3. Delete old snapshots beyond retention period
     console.log("Cleaning up old snapshots...");
-    const snapshots = await ec2
-      .describeSnapshots({
+    const snapshotsData = await ec2.send(
+      new DescribeSnapshotsCommand({
         Filters: [{ Name: "tag-key", Values: ["BackupDate"] }],
       })
-      .promise();
+    );
 
-    for (const snapshot of snapshots.Snapshots) {
+    for (const snapshot of snapshotsData.Snapshots || []) {
       const snapshotDate = new Date(snapshot.StartTime);
       const ageInDays = (Date.now() - snapshotDate) / (1000 * 60 * 60 * 24);
 
       if (ageInDays > RETENTION_DAYS) {
-        await ec2.deleteSnapshot({ SnapshotId: snapshot.SnapshotId }).promise();
+        await ec2.send(
+          new DeleteSnapshotCommand({ SnapshotId: snapshot.SnapshotId })
+        );
         console.log(`Deleted old snapshot: ${snapshot.SnapshotId}`);
       }
     }
 
     // Send SNS notification
-    await sns
-      .publish({
-        TopicArn: SNS_TOPIC_ARN,
-        Subject: "EBS Backup Completed",
-        Message: `Successfully created ${snapshotIds.length} snapshots.`,
-      })
-      .promise();
+    if (snapshotIds.length > 0) {
+      await sns.send(
+        new PublishCommand({
+          TopicArn: SNS_TOPIC_ARN,
+          Subject: "EBS Backup Completed",
+          Message: `Successfully created ${snapshotIds.length} snapshots.`,
+        })
+      );
+    }
 
     return {
       statusCode: 200,
@@ -87,13 +95,14 @@ exports.handler = async () => {
     };
   } catch (error) {
     console.error("Backup failed:", error);
-    await sns
-      .publish({
+    await sns.send(
+      new PublishCommand({
         TopicArn: SNS_TOPIC_ARN,
         Subject: "EBS Backup Failed",
         Message: `Error: ${error.message}`,
       })
-      .promise();
+    );
+
     return {
       statusCode: 500,
       body: JSON.stringify({ error: "Backup Failed" }),
