@@ -7,8 +7,10 @@ import {
 } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as path from "path";
 
+import { Topic } from "aws-cdk-lib/aws-sns";
+
 export interface LambdaProps {
-  topicArn: string;
+  backupAlertTopic: Topic;
 }
 
 export class LambdaResource extends Construct {
@@ -21,7 +23,7 @@ export class LambdaResource extends Construct {
       entry: path.join(__dirname, "../../lambda/backup-lambda/index.js"),
       timeout: cdk.Duration.seconds(30),
       environment: {
-        SNS_TOPIC_ARN: props.topicArn,
+        SNS_TOPIC_ARN: props.backupAlertTopic.topicArn,
       },
       bundling: {
         externalModules: ["aws-sdk"],
@@ -29,8 +31,10 @@ export class LambdaResource extends Construct {
       },
     };
 
-    new NodejsFunction(this, "BackupLambda", {
+    const backupLambda = new NodejsFunction(this, "BackupLambda", {
       ...nodeJsFunctionProps,
     });
+
+    props.backupAlertTopic.grantPublish(backupLambda);
   }
 }

@@ -9,6 +9,6 @@ export class SmartVaultStack extends cdk.Stack {
 
     const { backupAlertTopic } = new SNSResource(this, "SNSResource");
 
-    new LambdaResource(this, "", { topicArn: backupAlertTopic.topicArn });
+    new LambdaResource(this, "BackupLambdaResource", { backupAlertTopic });
   }
 }
