@@ -1,16 +1,14 @@
-import * as cdk from 'aws-cdk-lib';
-import { Construct } from 'constructs';
-// import * as sqs from 'aws-cdk-lib/aws-sqs';
+import * as cdk from "aws-cdk-lib";
+import { Construct } from "constructs";
+import { SNSResource } from "./constructs/sns";
+import { LambdaResource } from "./constructs/lambda";
 
 export class SmartVaultStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    // The code that defines your stack goes here
+    const { backupAlertTopic } = new SNSResource(this, "SNSResource");
 
-    // example resource
-    // const queue = new sqs.Queue(this, 'SmartVaultQueue', {
-    //   visibilityTimeout: cdk.Duration.seconds(300)
-    // });
+    new LambdaResource(this, "", { topicArn: backupAlertTopic.topicArn });
   }
 }
