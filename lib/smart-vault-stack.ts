@@ -2,6 +2,7 @@ import * as cdk from "aws-cdk-lib";
 import { Construct } from "constructs";
 import { SlackNotifierResource } from "./constructs/slack-notifier";
 import { LambdaResource } from "./constructs/lambda";
+import { MonitoringResource } from "./constructs/monitoring";
 
 export class SmartVaultStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -13,5 +14,7 @@ export class SmartVaultStack extends cdk.Stack {
     );
 
     new LambdaResource(this, "BackupLambdaResource", { backupAlertTopic });
+
+    new MonitoringResource(this, "Monitoring", backupAlertTopic);
   }
 }

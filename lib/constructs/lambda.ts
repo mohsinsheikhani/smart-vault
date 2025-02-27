@@ -47,8 +47,20 @@ export class LambdaResource extends Construct {
           "ec2:DescribeSnapshots",
           "ec2:DeleteSnapshot",
           "ec2:CreateTags",
+          "ec2:DescribeVolumes",
         ],
         resources: ["*"],
+      })
+    );
+
+    backupLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["cloudwatch:PutMetricData"],
+        resources: ["*"],
+        effect: iam.Effect.ALLOW,
+        conditions: {
+          StringEquals: { "cloudwatch:namespace": "SmartVault" },
+        },
       })
     );
 

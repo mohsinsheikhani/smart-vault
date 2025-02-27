@@ -4,11 +4,17 @@ import {
   CreateSnapshotCommand,
   DeleteSnapshotCommand,
   DescribeSnapshotsCommand,
+  DescribeVolumesCommand,
 } from "@aws-sdk/client-ec2";
 import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
+import {
+  CloudWatchClient,
+  PutMetricDataCommand,
+} from "@aws-sdk/client-cloudwatch";
 
 const ec2 = new EC2Client({});
 const sns = new SNSClient({});
+const cloudwatch = new CloudWatchClient({});
 
 const SNS_TOPIC_ARN = process.env.SNS_TOPIC_ARN;
 const RETENTION_DAYS = 7;
@@ -25,6 +31,7 @@ export const handler = async () => {
     );
 
     let snapshotIds = [];
+    let totalStorageUsed = 0;
 
     for (const reservation of instancesData.Reservations || []) {
       for (const instance of reservation.Instances || []) {
@@ -34,6 +41,12 @@ export const handler = async () => {
 
         const volumeId = instance.BlockDeviceMappings?.[0]?.Ebs?.VolumeId;
         if (volumeId) {
+          const volumeDetails = await ec2.send(
+            new DescribeVolumesCommand({ VolumeIds: [volumeId] })
+          );
+          const volumeSize = volumeDetails.Volumes[0]?.Size || 0;
+          totalStorageUsed += volumeSize;
+
           const snapshot = await ec2.send(
             new CreateSnapshotCommand({
               VolumeId: volumeId,
@@ -78,8 +91,28 @@ export const handler = async () => {
       }
     }
 
-    // Send SNS notification
     if (snapshotIds.length > 0) {
+      // Push Metrics to CloudWatch
+      console.log("Publishing CloudWatch Metrics...");
+      await cloudwatch.send(
+        new PutMetricDataCommand({
+          Namespace: "SmartVault",
+          MetricData: [
+            {
+              MetricName: "TotalSnapshots",
+              Unit: "Count",
+              Value: snapshotIds.length,
+            },
+            {
+              MetricName: "TotalStorageUsed",
+              Unit: "Gigabytes",
+              Value: totalStorageUsed,
+            },
+          ],
+        })
+      );
+
+      // Send SNS notification
       await sns.send(
         new PublishCommand({
           TopicArn: SNS_TOPIC_ARN,
@@ -95,6 +128,21 @@ export const handler = async () => {
     };
   } catch (error) {
     console.error("Backup failed:", error);
+
+    // Push Failure Metric to CloudWatch
+    await cloudwatch.send(
+      new PutMetricDataCommand({
+        Namespace: "SmartVault",
+        MetricData: [
+          {
+            MetricName: "BackupFailures",
+            Unit: "Count",
+            Value: 1,
+          },
+        ],
+      })
+    );
+
     await sns.send(
       new PublishCommand({
         TopicArn: SNS_TOPIC_ARN,
