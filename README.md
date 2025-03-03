@@ -6,7 +6,8 @@ Smart Vault is a serverless solution that automates EBS snapshot creation, reten
 
 ## Architecture
 
-![Smart Vault Architecture](./smart-vault.png)
+![Smart Vault Architecture](https://github.com/user-attachments/assets/2958b3e0-f0d8-4d89-b036-f387628896d8)
+
 
 ### Workflow
 
