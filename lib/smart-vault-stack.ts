@@ -13,7 +13,12 @@ export class SmartVaultStack extends cdk.Stack {
       "SlackNotifierResource"
     );
 
-    new LambdaResource(this, "BackupLambdaResource", { backupAlertTopic });
+    const bucketName = `smartvault-snapshots-${cdk.Aws.ACCOUNT_ID}`;
+
+    new LambdaResource(this, "BackupLambdaResource", {
+      backupAlertTopic,
+      bucketName,
+    });
 
     new MonitoringResource(this, "Monitoring", backupAlertTopic);
   }

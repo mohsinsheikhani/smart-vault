@@ -11,9 +11,11 @@ import * as eventsTargets from "aws-cdk-lib/aws-events-targets";
 import * as iam from "aws-cdk-lib/aws-iam";
 
 import { Topic } from "aws-cdk-lib/aws-sns";
+import { Bucket } from "aws-cdk-lib/aws-s3";
 
 export interface LambdaProps {
   backupAlertTopic: Topic;
+  bucketName: string;
 }
 
 export class LambdaResource extends Construct {
@@ -27,6 +29,8 @@ export class LambdaResource extends Construct {
       timeout: cdk.Duration.seconds(30),
       environment: {
         SNS_TOPIC_ARN: props.backupAlertTopic.topicArn,
+        S3_BUCKET_NAME: props.bucketName,
+        SOURCE_REGION: "us-east-1",
       },
       bundling: {
         nodeModules: ["@aws-sdk/client-ec2", "@aws-sdk/client-sns"],
@@ -41,13 +45,22 @@ export class LambdaResource extends Construct {
 
     backupLambda.addToRolePolicy(
       new iam.PolicyStatement({
+        actions: ["s3:PutObject"],
+        resources: [`arn:aws:s3:::${props.bucketName}/*`],
+      })
+    );
+
+    backupLambda.addToRolePolicy(
+      new iam.PolicyStatement({
         actions: [
           "ec2:DescribeInstances",
-          "ec2:CreateSnapshot",
-          "ec2:DescribeSnapshots",
           "ec2:DeleteSnapshot",
           "ec2:CreateTags",
           "ec2:DescribeVolumes",
+          "ec2:CreateSnapshot",
+          "ec2:DescribeSnapshots",
+          "ec2:CopySnapshot",
+          "ec2:DescribeSnapshotAttribute",
         ],
         resources: ["*"],
       })

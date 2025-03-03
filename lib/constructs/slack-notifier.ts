@@ -26,10 +26,6 @@ export class SlackNotifierResource extends Construct {
       environment: {
         SLACK_WEBHOOK_URL: process.env.SLACK_WEBHOOK_URL!,
       },
-      bundling: {
-        externalModules: ["aws-sdk"],
-        minify: true,
-      },
     };
 
     this.slackLambda = new NodejsFunction(this, "SlackNotifierLambda", {

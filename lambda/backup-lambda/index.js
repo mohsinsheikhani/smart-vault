@@ -5,19 +5,29 @@ import {
   DeleteSnapshotCommand,
   DescribeSnapshotsCommand,
   DescribeVolumesCommand,
+  CopySnapshotCommand,
 } from "@aws-sdk/client-ec2";
 import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 import {
   CloudWatchClient,
   PutMetricDataCommand,
 } from "@aws-sdk/client-cloudwatch";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const ec2 = new EC2Client({});
 const sns = new SNSClient({});
 const cloudwatch = new CloudWatchClient({});
+const s3 = new S3Client({
+  region: "us-east-2",
+});
 
 const SNS_TOPIC_ARN = process.env.SNS_TOPIC_ARN;
+const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME;
+const SOURCE_REGION = process.env.SOURCE_REGION;
+const DESTINATION_REGION = "us-east-2";
 const RETENTION_DAYS = 7;
+
+const ec2Dest = new EC2Client({ region: DESTINATION_REGION });
 
 export const handler = async () => {
   try {
@@ -35,9 +45,7 @@ export const handler = async () => {
 
     for (const reservation of instancesData.Reservations || []) {
       for (const instance of reservation.Instances || []) {
-        console.log(
-          `📌 Creating snapshot for instance: ${instance.InstanceId}`
-        );
+        console.log(`Creating snapshot for instance: ${instance.InstanceId}`);
 
         const volumeId = instance.BlockDeviceMappings?.[0]?.Ebs?.VolumeId;
         if (volumeId) {
@@ -66,7 +74,38 @@ export const handler = async () => {
           );
 
           snapshotIds.push(snapshot.SnapshotId);
+
           console.log(`Snapshot Created: ${snapshot.SnapshotId}`);
+
+          console.log(
+            `Copying snapshot ${snapshot.SnapshotId} to ${DESTINATION_REGION}...`
+          );
+
+          await ec2Dest.send(
+            new CopySnapshotCommand({
+              SourceRegion: SOURCE_REGION,
+              SourceSnapshotId: snapshot.SnapshotId,
+              Description: `Cross-region backup of ${snapshot.SnapshotId}`,
+            })
+          );
+
+          console.log(`Snapshot copied to ${DESTINATION_REGION}`);
+
+          console.log(`Exporting snapshot ${snapshot.SnapshotId} to S3...`);
+
+          await s3.send(
+            new PutObjectCommand({
+              Bucket: S3_BUCKET_NAME,
+              Key: `snapshots/${snapshot.SnapshotId}.json`,
+              Body: JSON.stringify({
+                snapshotId: snapshot.SnapshotId,
+                instanceId: instance.InstanceId,
+                createdAt: new Date().toISOString(),
+              }),
+            })
+          );
+
+          console.log(`Snapshot metadata stored in S3`);
         }
       }
     }
