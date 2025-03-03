@@ -52,14 +52,6 @@ cdk bootstrap
 cdk deploy
 ```
 
-## Configuration
-
-Modify `cdk.json` or `lib/config.ts` to customize settings such as:
-
-- Snapshot retention period
-- Backup tagging strategy
-- Notification channels
-
 ## Monitoring
 
 - Check **CloudWatch Logs** for Lambda execution details.
